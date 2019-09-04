@@ -122,16 +122,16 @@ int main(void)
   //std::unique_ptr<A> base = std::make_unique<B>(); 
   //base->A2();
 
-  //cout << "sizeof(D) = " << sizeof(D) << endl;
-  //std::unique_ptr<C> base_d = std::make_unique<D>(); 
-  //C* base_d = new D();
+  cout << "sizeof(D) = " << sizeof(D) << endl;
+  std::unique_ptr<C> c = std::make_unique<D>(); 
+  c->C3();
 
   //D d = D();
   //C* c = &d;
   //c->C3();
   
-  C c = C();
-  ExecuteC3(&c);
+  //C c = C();
+  //ExecuteC3(&c);
 
   //size_t* c_vptr = reinterpret_cast<size_t*>(*reinterpret_cast<size_t*>(base_d));
   //Func func = reinterpret_cast<Func>(c_vptr[1]);

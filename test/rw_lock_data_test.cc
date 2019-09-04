@@ -56,13 +56,13 @@ void Read() {
   butil::Timer timer;
 
   while (kStopFlag.load() == false) {
-    int work_times = kWorkTimeus;
+    //int work_times = kWorkTimeus;
     timer.start();
 
     pthread_rwlock_rdlock(&kRWLock);
-    while (work_times--) {
+    //while (work_times--) {
       kGlobalConfData->name();
-    }
+    //}
     pthread_rwlock_unlock(&kRWLock);
 
     timer.stop();

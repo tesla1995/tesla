@@ -54,18 +54,17 @@ TestClass* kGlobalConfData = NULL;
 
 void Read() {
   std::string last_name("tesla");
-  int work_times = kWorkTimeus;
   butil::Timer timer;
 
   while (kStopFlag.load() == false) {
-    work_times = kWorkTimeus;
+    //int work_times = kWorkTimeus;
     timer.start();
 
     {
       std::lock_guard guard(kGlobalMutex);
-      while (work_times--) {
+      //while (work_times--) {
         kGlobalConfData->name();
-      }
+      //}
     }
 
     timer.stop();
