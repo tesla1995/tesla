@@ -375,3 +375,12 @@ cc_binary(
     "-lbrpc",
   ],
 )
+
+cc_test(
+  name = "explicitly_construct_test",
+  srcs = ["explicitly_construct_test.cc"],
+  deps = [
+    "//tutil:tutil",
+    "//external:gtest",
+  ],
+)
