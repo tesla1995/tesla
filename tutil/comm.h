@@ -13,39 +13,27 @@
 // limitations under the License.
 
 // Author: Michael Tesla (michaeltesla1995@gmail.com)
-// Date: Wed Aug 14 07:42:39 CST 2019
+// Date: Fri Sep  6 00:54:00 CST 2019
 
-#ifndef TESLA_TUTIL_EXTENSIONS_H_
-#define TESLA_TUTIL_EXTENSIONS_H_
-
-#include <string>
-#include <unordered_map>
-#include <mutex>
-#include <functional>
-
-#include "tutil/synchronization/fast_pthread_mutex.h"
+#ifndef TESLA_TUTIL_COMM_H_
+#define TESLA_TUTIL_COMM_H_
 
 namespace tesla {
 namespace tutil {
 
 template <typename T>
-class Extension {
- public:
-  // Note: Don't call GetInstance() in destructor of other static objects.
-  static Extension* GetInstance();
-  void RegisterOrDir(const char* name, T* default_instance);
-  T* Find(const char* name);
- private:
-  Extension();
-  ~Extension();
- private:
-  std::unordered_map<const char*, T*> map_;
-  FastPthreadMutex map_mutex_;
-};
+void tesla_destruct_object(void* object) {
+  reinterpret_cast<T*>(object)->~T();
+}
+
+template <typename T>
+void tesla_delete_object(void* object) {
+  delete reinterpret_cast<T*>(object);
+}
 
 }  // namespace tutil
 }  // namespace tesla
 
 #include "tutil/extension_inl.h"
 
-#endif  // TESLA_TUTIL_EXTENSIONS_H_
+#endif  // TESLA_TUTIL_COMM_H_

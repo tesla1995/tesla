@@ -18,37 +18,55 @@
 #ifndef TESLA_TUTIL_EXTENSIONS_INL_H_
 #define TESLA_TUTIL_EXTENSIONS_INL_H_
 
+#include "tutil/comm.h"
+
 namespace tesla {
 namespace tutil {
 
 template <typename T>
-Extension<T>& Extension<T>::GetInstance() {
-  // a fast, thread-safe singleton.
-  static Extension<T> extension;
-  return extension;
+Extension<T>::Extension() {
 }
 
 template <typename T>
-void Extension<T>::RegisterOrDir(const std::string& name, const CreateFunc& create_func) {
-  if (!name.empty()) {
-    // if name was used, exit.
-    if (map_.insert(std::make_pair(name, create_func)).second) {
+Extension<T>::~Extension() {
+  if (!map_.empty()) {
+    for (auto iter = map_.begin(); iter != map_.end(); iter++) {
+      tesla_delete_object<T>(iter->second);
+    }
+    map_.clear();
+  }
+}
+
+template <typename T>
+Extension<T>* Extension<T>::GetInstance() {
+  // a fast, thread-safe singleton.
+  static Extension<T> extension;
+  return &extension;
+}
+
+template <typename T>
+void Extension<T>::RegisterOrDir(const char* name, T* default_instance) {
+  if (name && default_instance) {
+    std::lock_guard<FastPthreadMutex> guard(map_mutex_);
+    if (map_.insert(std::make_pair(name, default_instance)).second) {
       return;
-    } 
+    }
   }
   exit(1);
 }
 
 template <typename T>
-bool Extension<T>::Find(const std::string& name, CreateFunc& create_func) const {
-  if (!name.empty()) {
-    auto iter = map_.find(name);
-    if (iter != map_.end()) {
-      create_func = iter->second;
-      return true;
-    }
+T* Extension<T>::Find(const char* name) {
+  if (name == nullptr) {
+    return nullptr;
   }
-  return false;
+
+  std::lock_guard<FastPthreadMutex> guard(map_mutex_);
+  auto iter = map_.find(name);
+  if (iter != map_.end()) {
+    return iter->second;
+  }
+  return nullptr;
 }
 
 }  // namespace tutil

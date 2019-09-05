@@ -28,11 +28,12 @@ class Human {
   virtual ~Human() {}
   virtual void talk() const = 0;
   virtual void color() const = 0;
+  virtual Human* New() const = 0;
 };
 
 class BlackHuman : public Human {
  public:
-  static Human* New() {
+  Human* New() const override {
     return new BlackHuman();
   }
 
@@ -49,14 +50,16 @@ class BlackHuman : public Human {
   }
 };
 
+Extension<Human>* HumanFactory() {
+  return Extension<Human>::GetInstance();
+}
+
 int main(void)
 {
-  Extension<Human>::GetInstance().RegisterOrDir("black", BlackHuman::New);
+  HumanFactory()->RegisterOrDir("black", new BlackHuman());
 
-  Extension<Human>::CreateFunc black_func;
-  std::unique_ptr<Human> black_human;
-  if (Extension<Human>::GetInstance().Find("black", black_func)) {
-    black_human.reset(black_func());
+  if (auto instance =  HumanFactory()->Find("black")) {
+    std::unique_ptr<Human> black_human(instance->New());
     black_human->color();
     black_human->talk();
   }
