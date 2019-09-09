@@ -97,9 +97,8 @@ int main(int argc, char* argv[])
   DoublyBufferedData<TestClass> data;
   kGlobalConfData = &data;
 
-  brpc::StartDummyServerAt(8888/*port*/);
-  //google::ParseCommandLineFlags(&argc, &argv, true);
-
+  //brpc::StartDummyServerAt(8888/*port*/);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (argc > 1) {
     thread_num = atoi(argv[1]);
