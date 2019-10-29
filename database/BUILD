@@ -29,6 +29,7 @@ cc_library(
     "//external:gflags",
     "//log:tlog",
   ],
+  visibility = ["//visibility:public"],
 )
 
 cc_binary(

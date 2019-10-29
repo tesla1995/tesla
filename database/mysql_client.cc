@@ -75,7 +75,7 @@ void MysqlClient::CreateMysqlClient() {
 }
 
 MysqlClient::~MysqlClient() {
-  LOG_DEBUG << "in dtor";
+  LOG_DEBUG << "Close the clients to the MySQL server";
 }
 
 MysqlClient::MysqlClientPtr& MysqlClient::Singleton() {
@@ -88,14 +88,13 @@ int MysqlClient::DefaultSelectCallback(mysqlx::SqlResult& result, void *args)
   (void)(args);
 
   LOG_DEBUG << "List of rows in the resultset.";
-  std::stringstream line;
   for (mysqlx::Row row; (row = result.fetchOne()); ) {
+    std::stringstream line;
     line << "next row: ";
     for (size_t i = 0; i < row.colCount(); i++) {
       line << row[i] << ",";
     }
     LOG_DEBUG << line.str();
-    line.clear();
   }
 
   return 0;

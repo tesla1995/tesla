@@ -46,3 +46,18 @@ cc_binary(
   #  "//test:certs",
   #]
 )
+
+cc_binary(
+  name = "echo_server",
+  srcs = ["server.cc"],
+  deps = [
+    ":echo_cc_proto",
+  ],
+  linkopts = [
+    "-lgflags",
+    "-lbrpc",
+  ],
+  #data = [
+  #  "//test:certs",
+  #]
+)
