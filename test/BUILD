@@ -384,3 +384,13 @@ cc_test(
     "//external:gtest",
   ],
 )
+
+cc_test(
+  name = "packed_cache_test",
+  srcs = ["packed_cache_test.cc"],
+  deps = [
+    "//tutil:tutil",
+    "//external:gtest",
+    "//external:glog",
+  ],
+)

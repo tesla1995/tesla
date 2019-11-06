@@ -1,0 +1,15 @@
+# server
+
+# 在关闭连接前打印一条日志
+-log_idle_connection_close=true
+
+# 每条日志中带上主机名 
+-log_hostname
+
+# 打印FATAL日志后退出程序
+-crash_on_fatal_log=true
+
+# 日志级别
+# 0=INFO 1=NOTICE 2=WARNING 3=ERROR 4=FATAL，默认为0
+-minloglevel=2
+

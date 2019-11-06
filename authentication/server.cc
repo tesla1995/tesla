@@ -15,21 +15,39 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// A server to receive EchoRequest and send back EchoResponse.
+// A server to receive RegisterUserRequest and send back GeneralResponse.
 
 #include <gflags/gflags.h>
 #include <butil/logging.h>
 #include <brpc/server.h>
 #include "authentication/register_user.pb.h"
 
-DEFINE_bool(echo_attachment, true, "Echo attachment as well");
+DEFINE_bool(echo_attachment, true, "RegisterUser attachment as well");
 DEFINE_int32(port, 8000, "TCP Port of this server");
 DEFINE_int32(idle_timeout_s, -1, "Connection will be closed if there is no "
              "read/write operations during the last `idle_timeout_s'");
 DEFINE_int32(logoff_ms, 2000, "Maximum duration of server's LOGOFF state "
              "(waiting for client to close connection before server stops)");
 
-// Your implementation of example::EchoService
+struct MySessionLocalData {
+  MySessionLocalData() : x(23) {}
+  int x;
+};
+
+// Implement your session data fatory derived from brpc::DataFactory.
+// Note that CreateData() and DestroyData() need to be thread-safe, as
+// they will be called in multiple threads during the running of server.
+class MySessionLocalDataFactory : public brpc::DataFactory {
+  public:
+    void* CreateData() const {
+      return new MySessionLocalData;
+    }  
+    void DestroyData(void* d) const {
+      delete static_cast<MySessionLocalData*>(d);
+    }  
+};
+
+// Your implementation of example::RegisterUserService
 // Notice that implementing brpc::Describable grants the ability to put
 // additional information in /status.
 namespace tesla {
@@ -62,6 +80,19 @@ public:
                   << "mobile_phone[" << request->mobile_phone() << "],"
                   << " (attached=" << cntl->request_attachment() << ")";
 
+        // Get the session-local data which is created by
+        // ServerOptions.session_local_data_factory and
+        // reused between different RPC.
+        MySessionLocalData* session_data =
+          static_cast<MySessionLocalData*>(cntl->session_local_data());
+
+        if (session_data == nullptr) {
+          cntl->SetFailed("Require ServerOptions.session_local_data_factory to be set with a correctly implemented instance");
+          return;
+        } else {
+          LOG(INFO) << "session local data: " << session_data->x;
+        }
+        
         // Fill response.
         //response->set_message(request->message());
         
@@ -69,6 +100,8 @@ public:
           response->set_result(1); 
           response->set_error_description("Wrong password");
           LOG(ERROR) << "Wrong password";
+          cntl->SetFailed("Wrong password");
+          return;
         }
 
         // You can compress the response by setting Controller, but be aware
@@ -96,6 +129,9 @@ int main(int argc, char* argv[]) {
     // Instance of your service.
     tesla::authentication::RegisterUserServiceImpl echo_service_impl;
 
+    // Instance of your session data factory.
+    MySessionLocalDataFactory session_local_data_factory;
+
     // Add the service into server. Notice the second parameter, because the
     // service is put on stack, we don't want server to delete it, otherwise
     // use brpc::SERVER_OWNS_SERVICE.
@@ -108,8 +144,9 @@ int main(int argc, char* argv[]) {
     // Start the server.
     brpc::ServerOptions options;
     options.idle_timeout_sec = FLAGS_idle_timeout_s;
+    options.session_local_data_factory = &session_local_data_factory;
     if (server.Start(FLAGS_port, &options) != 0) {
-        LOG(ERROR) << "Fail to start EchoServer";
+        LOG(ERROR) << "Fail to start RegisterUserServer";
         return -1;
     }
 

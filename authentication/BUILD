@@ -51,6 +51,7 @@ cc_binary(
   linkopts = [
     "-lgflags",
     "-lbrpc",
+    "-ltcmalloc_and_profiler",
   ],
   #data = [
   #  "//test:certs",

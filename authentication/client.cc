@@ -95,6 +95,6 @@ int main(int argc, char* argv[]) {
         usleep(FLAGS_interval_ms * 1000L);
     }
 
-    LOG(INFO) << "EchoClient is going to quit";
+    LOG(INFO) << "Authenticatin Client is going to quit";
     return 0;
 }
