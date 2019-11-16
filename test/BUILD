@@ -394,3 +394,22 @@ cc_test(
     "//external:glog",
   ],
 )
+
+cc_test(
+  name = "system_alloc_test",
+  srcs = ["system_alloc_test.cc"],
+  deps = [
+    "//allocator:allocator",
+    "//external:gtest",
+  ],
+)
+
+cc_test(
+  name = "object_allocator_test",
+  srcs = ["object_allocator_test.cc"],
+  deps = [
+    "//allocator:allocator",
+    "//external:gtest",
+    "//tutil:tutil",
+  ],
+)
