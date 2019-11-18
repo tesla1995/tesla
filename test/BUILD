@@ -413,3 +413,31 @@ cc_test(
     "//tutil:tutil",
   ],
 )
+
+cc_binary(
+  name = "poxis_mutex_test",
+  srcs = ["poxis_mutex_test.cc"],
+  copts = [
+    "-DBRPC_ENABLE_CPU_PROFILER",
+  ],
+  linkopts = [
+    "-ltcmalloc_and_profiler",
+    "-lpthread",
+    "-lgflags",
+    "-lbrpc",
+  ],
+)
+
+cc_binary(
+  name = "poxis_spinlock_test",
+  srcs = ["poxis_spinlock_test.cc"],
+  copts = [
+    "-DBRPC_ENABLE_CPU_PROFILER",
+  ],
+  linkopts = [
+    "-ltcmalloc_and_profiler",
+    "-lpthread",
+    "-lgflags",
+    "-lbrpc",
+  ],
+)
