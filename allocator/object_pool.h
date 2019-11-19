@@ -95,21 +95,33 @@ class ObjectPool {
         return local_free_chunk_.ptrs[--local_free_chunk_.num_ptrs];
       } 
 
-      //if ()
+      if (object_pool_->PopFreeChunk(local_free_chunk_)) {
+        return local_free_chunk_.ptrs[--local_free_chunk_.num_ptrs];
+      }
       
       if (local_block_ && local_block_->num_items < kNumItemsInBlock) {
         T* object = new ((T*)local_block_->items + local_block_->num_items) T;
         ++local_block_->num_items; 
         return object;
       }
+
+      local_block_ = AddBlock(&local_block_index_);
+      if (local_block_) {
+        T* object = new ((T*)local_block_->items + local_block_->num_items) T;
+        ++local_block_->num_items; 
+        return object;
+      }
+
+      return nullptr;
     }
 
     void Delete(T* ptr) {
-      
+          
     }
 
    private:
     ObjectPool* object_pool_{nullptr};
+    size_t local_block_index_{0};
     Block* local_block_{nullptr};
     size_t num_items_{0};
     FreeChunk local_free_chunk_;
@@ -162,6 +174,45 @@ class ObjectPool {
     return true;
   }
 
+  static Block* AddBlock(size_t* index) {
+    Block* new_block = new(std::nothrow) Block;
+    if (!new_block) {
+      return nullptr;
+    }
+
+    std::lock_guard<std::mutex> guard(block_groups_mutex_); 
+
+    do {
+      if (num_block_groups >= 1) {
+        BlockGroup* group = block_groups[num_block_groups - 1];
+        if (group->num_blocks < kNumBlocksInGroup) {
+          block_groups[group->num_blocks] = new_block;
+          *index = (num_block_groups - 1) * kNumBlocksInGroup + group->num_blocks;
+          ++group->num_blocks;
+          return new_block;
+        }
+      }
+    } while (AddGroup(num_block_groups));
+
+    // Fail to add new BlockGroup
+    delete new_block;
+    return nullptr;
+  }
+
+  static bool AddGroup(size_t group_index) {
+    (void)(group_index);
+
+    if (num_block_groups < kMaxNumBlockGroup) {
+      BlockGroup* new_group = new(std::nothrow) BlockGroup;
+      if (new_group) {
+        block_groups[num_block_groups] = new_group; 
+        ++num_block_groups;
+        return true;
+      }
+    }
+    return false;
+  }
+
   ObjectPool() {}
 
   ~ObjectPool() {}
@@ -189,12 +240,13 @@ class ObjectPool {
   static std::mutex init_mutex_;
 #endif
 
-  BlockGroup block_groups[kMaxNumBlockGroup]; 
-  size_t num_block_groups{0};
+  static BlockGroup block_groups[kMaxNumBlockGroup]; 
+  static size_t num_block_groups;
 
-  std::vector<DynamicFreeChunk*> free_chunks_;
+  static std::vector<DynamicFreeChunk*> free_chunks_;
 
-  std::mutex free_chunks_mutex_;
+  static std::mutex free_chunks_mutex_;
+  static std::mutex block_groups_mutex_;
 };
 
 }  // namespace allocator
