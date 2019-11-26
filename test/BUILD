@@ -441,3 +441,17 @@ cc_binary(
     "-lbrpc",
   ],
 )
+
+cc_test(
+  name = "object_pool_test",
+  srcs = ["object_pool_test.cc"],
+  deps = [
+    "//allocator:allocator",
+    "//external:gtest",
+    "//tutil:tutil",
+  ],
+  copts = COPTS,
+  linkopts = OPTIMIZE + [
+    "-lpthread",
+  ],
+)

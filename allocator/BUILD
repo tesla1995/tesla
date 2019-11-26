@@ -19,5 +19,6 @@ cc_library(
         ":coverage": COVERAGE,
         "//conditions:default": [],
     }),
+    linkopts = OPTIMIZE,
     visibility = ["//visibility:public"],
 )
