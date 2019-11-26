@@ -20,12 +20,13 @@
 #include <mutex>
 #include <vector>
 #include <memory>
+#include <pthread.h>
 #include "tutil/compiler_specific.h"
 
 namespace tesla {
 namespace allocator {
 
-static constexpr size_t kPageSize = 1UL << 20;
+static constexpr size_t kPageSize = 4UL << 10;
 static constexpr size_t kPageMask = kPageSize - 1;
 
 template <typename T, size_t NUM_ITEMS>
@@ -40,15 +41,20 @@ struct ObjectPoolFreeChunk<T, 0> {
   T* ptrs[0];
 };
 
-template <typename T>
-struct ObjectPoolBlockMaxSize {
-  static constexpr size_t value = kPageSize - sizeof(size_t);
+template <typename T> struct ObjectPoolBlockMaxSize {
+    static const size_t value = 1UL << 16; // bytes
+};
+template <typename T> struct ObjectPoolBlockMaxItem {
+    static const size_t value = 256;
 };
 
 template <typename T>
-struct ObjectPoolBlockItemNum {
-  static constexpr size_t value =
-    ObjectPoolBlockMaxSize<T>::value / sizeof(T);
+class ObjectPoolBlockItemNum {
+    static const size_t N1 = ObjectPoolBlockMaxSize<T>::value / sizeof(T);
+    static const size_t N2 = (N1 < 1 ? 1 : N1);
+public:
+    static const size_t value = (N2 > ObjectPoolBlockMaxItem<T>::value ?
+                                 ObjectPoolBlockMaxItem<T>::value : N2);
 };
 
 template <typename T>
@@ -56,31 +62,29 @@ class ObjectPool {
  public:
   static constexpr size_t kNumItemsInBlock = ObjectPoolBlockItemNum<T>::value;
   static constexpr size_t kNumItemsInFreeChunk = kNumItemsInBlock;
-  static constexpr size_t kMaxNumBlockGroup = 65536;
-  static constexpr size_t kNumBlocksInGroup = 65536;
-  static constexpr size_t kInitialFreeListSize = 1024;
+  static constexpr size_t kMaxNumBlockGroup = 1UL << 16;
+  static constexpr size_t kNumBlocksInGroup = 1UL << 16;
+  static constexpr size_t kInitialFreeListSize = 1UL << 10;
 
   using FreeChunk = ObjectPoolFreeChunk<T, kNumItemsInFreeChunk>;
   using DynamicFreeChunk = ObjectPoolFreeChunk<T, 0>;
 
   struct TESLA_CACHELINE_ALIGNMENT Block {
-    char items[ObjectPoolBlockMaxSize<T>::value];
+    char items[sizeof(T) * kNumItemsInBlock];
     size_t num_items;
 
     Block() : num_items(0) {}
   };
 
   struct BlockGroup {
-    Block* blocks[kNumBlocksInGroup]; 
-    size_t num_blocks;
+    std::atomic<size_t> num_blocks;
+    std::atomic<Block*> blocks[kNumBlocksInGroup]; 
 
     BlockGroup() : num_blocks(0) {
-      memset(blocks, 0, sizeof(Block*) * kNumBlocksInGroup);
+      memset(blocks, 0, sizeof(std::atomic<Block*>) * kNumBlocksInGroup);
     }
   };
  
-  static_assert((sizeof(Block) & kPageMask) == 0);
-
   // Each thread has an instance of this class.
   class TESLA_CACHELINE_ALIGNMENT LocalPool {
    public:
@@ -112,14 +116,14 @@ class ObjectPool {
         return local_free_chunk_.ptrs[--local_free_chunk_.num_ptrs];
       }
       
-      if (local_block_ && local_block_->num_items < kNumItemsInBlock) {
+      if (local_block_ != nullptr && local_block_->num_items < kNumItemsInBlock) {
         T* object = new ((T*)local_block_->items + local_block_->num_items) T;
         ++local_block_->num_items; 
         return object;
       }
 
       local_block_ = AddBlock();
-      if (local_block_) {
+      if (local_block_ != nullptr) {
         T* object = new ((T*)local_block_->items + local_block_->num_items) T;
         ++local_block_->num_items; 
         return object;
@@ -152,6 +156,7 @@ class ObjectPool {
    private:
     ObjectPool* object_pool_{nullptr};
     Block* local_block_{nullptr};
+    size_t index{0};
     FreeChunk local_free_chunk_;
   };
 
@@ -187,20 +192,6 @@ class ObjectPool {
     return GetLocalPool()->NumFreeItems();
   }
 
- private:
-  ObjectPool() {
-    free_chunks_.reserve(kInitialFreeListSize);
-  }
-
-  ~ObjectPool() {
-
-  }
-
-  inline LocalPool* GetLocalPool() {
-    static thread_local LocalPool local_pool_(this);
-    return &local_pool_;
-  }
-
   bool PopFreeChunk(FreeChunk& c) {
     // Critical for the case that most Delete are called in
     // different threads.
@@ -224,6 +215,20 @@ class ObjectPool {
     return true;
   }
 
+  inline LocalPool* GetLocalPool() {
+    static thread_local LocalPool local_pool(this);
+    return &local_pool;
+  }
+
+ private:
+  ObjectPool() {
+    free_chunks_.reserve(kInitialFreeListSize);
+  }
+
+  ~ObjectPool() {
+
+  }
+
   bool PushFreeChunk(const FreeChunk& c) {
     DynamicFreeChunk* p = (DynamicFreeChunk*)malloc(
       sizeof(DynamicFreeChunk) + sizeof(c.ptrs[0]) * c.num_ptrs);
@@ -240,48 +245,59 @@ class ObjectPool {
   }
 
   static Block* AddBlock() {
-    Block* new_block = new(std::nothrow) Block;
+    Block* const new_block = new (std::nothrow) Block;
     if (new_block == nullptr) {
       return nullptr;
     }
 
-    std::lock_guard<std::mutex> guard(block_groups_mutex_); 
-
+    size_t num_block_groups;
     do {
+      num_block_groups = num_block_groups_.load(std::memory_order_acquire);
       if (num_block_groups >= 1) {
-        BlockGroup* group = block_groups[num_block_groups - 1];
-        if (group->num_blocks < kNumBlocksInGroup) {
-          group->blocks[group->num_blocks] = new_block;
-          ++group->num_blocks;
+        BlockGroup* group =
+            block_groups_[num_block_groups - 1].load(std::memory_order_relaxed);
+        size_t block_index =
+            group->num_blocks.fetch_add(1, std::memory_order_relaxed);
+        if (block_index < kNumBlocksInGroup) {
+          group->blocks[block_index].store(new_block, std::memory_order_release);
           return new_block;
         }
+        group->num_blocks.fetch_sub(1, std::memory_order_relaxed);
       }
     } while (AddGroup(num_block_groups));
 
-    // Fail to add new BlockGroup
+    // Fail to add BlockGroup
     delete new_block;
     return nullptr;
   }
 
-  static bool AddGroup(size_t group_index) {
-    (void)(group_index);
+  static bool AddGroup(size_t num_block_groups) {
+    BlockGroup* new_group{nullptr};
 
-    if (num_block_groups < kMaxNumBlockGroup) {
-      BlockGroup* new_group = new(std::nothrow) BlockGroup;
-      if (new_group) {
-        block_groups[num_block_groups] = new_group; 
-        ++num_block_groups;
-        return true;
+    std::lock_guard<std::mutex> guard(block_groups_mutex_); 
+    const size_t group_index = num_block_groups_.load(std::memory_order_relaxed);
+    if (num_block_groups != group_index) {
+      // Other thread has already got the lock and added a BlockGroup.
+      return true;
+    }
+
+    if (group_index < kMaxNumBlockGroup) {
+      new_group = new(std::nothrow) BlockGroup;
+      if (new_group != nullptr) {
+        // use std::memory_order_consume to prevent other threads calling AddBlock() from seeing
+        // **un-constructed** `new_group' ?
+        block_groups_[group_index].store(new_group, std::memory_order_relaxed);
+        num_block_groups_.store(group_index + 1, std::memory_order_release);
       }
     }
-    return false;
+    return new_group != nullptr;
   }
 
   //static std::atomic<ObjectPool*> object_pool_{nullptr};
   //static std::mutex init_mutex_;
 
-  static BlockGroup* block_groups[kMaxNumBlockGroup]; 
-  static size_t num_block_groups;
+  static std::atomic<BlockGroup*> block_groups_[kMaxNumBlockGroup]; 
+  static std::atomic<size_t> num_block_groups_;
   static std::mutex block_groups_mutex_;
 
   std::vector<DynamicFreeChunk*> free_chunks_;
@@ -291,10 +307,10 @@ class ObjectPool {
 };
 
 template <typename T>
-typename ObjectPool<T>::BlockGroup* ObjectPool<T>::block_groups[kMaxNumBlockGroup];
+std::atomic<typename ObjectPool<T>::BlockGroup*> ObjectPool<T>::block_groups_[kMaxNumBlockGroup];
 
 template <typename T>
-size_t ObjectPool<T>::num_block_groups{0};
+std::atomic<size_t> ObjectPool<T>::num_block_groups_{0};
 
 template <typename T>
 std::mutex ObjectPool<T>::block_groups_mutex_;

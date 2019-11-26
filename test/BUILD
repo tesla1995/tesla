@@ -450,8 +450,8 @@ cc_test(
     "//external:gtest",
     "//tutil:tutil",
   ],
-  copts = COPTS,
-  linkopts = OPTIMIZE + [
+  copts = COPTS + OPTIMIZE,
+  linkopts = [
     "-lpthread",
   ],
 )

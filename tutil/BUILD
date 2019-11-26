@@ -22,10 +22,7 @@ cc_library(
         "containers/*.h",
         "synchronization/*.h",
     ]),
-    copts = COPTS + select({
-        ":coverage": COVERAGE,
-        "//conditions:default": [],
-    }),
+    copts = COPTS + OPTIMIZE,
     visibility = ["//visibility:public"],
     deps = [
         "//log:tlog",
