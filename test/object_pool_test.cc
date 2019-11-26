@@ -102,7 +102,8 @@ TEST_F(ObjectPoolTest, NonDestructObj) {
   ASSERT_EQ(obj->b, 2);
 
   ObjectPool<NonDestructObj>::Singleton()->Delete(obj);
-  obj = ObjectPool<NonDestructObj>::Singleton()->New(); // ONLY for test, need to clear object before use.
+  // ONLY for test, normally need to clear object before use.
+  obj = ObjectPool<NonDestructObj>::Singleton()->New();
   ASSERT_EQ(obj->a, 1);
   ASSERT_EQ(obj->b, 2);
 }

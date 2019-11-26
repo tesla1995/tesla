@@ -25,7 +25,7 @@
 namespace tesla {
 namespace allocator {
 
-static constexpr size_t kPageSize = 1UL << 20;
+static constexpr size_t kPageSize = 4UL << 10;
 static constexpr size_t kPageMask = kPageSize - 1;
 
 template <typename T, size_t NUM_ITEMS>
@@ -42,13 +42,21 @@ struct ObjectPoolFreeChunk<T, 0> {
 
 template <typename T>
 struct ObjectPoolBlockMaxSize {
-  static constexpr size_t value = kPageSize - sizeof(size_t);
+  static constexpr size_t value = 64 * 1024;
 };
 
 template <typename T>
-struct ObjectPoolBlockItemNum {
-  static constexpr size_t value =
-    ObjectPoolBlockMaxSize<T>::value / sizeof(T);
+struct ObjectPoolBlockMaxItem {
+  static constexpr size_t value = 256;
+};
+
+template <typename T>
+class ObjectPoolBlockItemNum {
+    static const size_t N1 = ObjectPoolBlockMaxSize<T>::value / sizeof(T);
+    static const size_t N2 = (N1 < 1 ? 1 : N1);
+public:
+    static const size_t value = (N2 > ObjectPoolBlockMaxItem<T>::value ?
+                                 ObjectPoolBlockMaxItem<T>::value : N2);
 };
 
 template <typename T>
@@ -79,8 +87,6 @@ class ObjectPool {
     }
   };
  
-  static_assert((sizeof(Block) & kPageMask) == 0);
-
   // Each thread has an instance of this class.
   class TESLA_CACHELINE_ALIGNMENT LocalPool {
    public:
