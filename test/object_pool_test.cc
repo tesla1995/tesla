@@ -150,17 +150,17 @@ TEST_F(ObjectPoolTest, NewPerformance) {
     timer1.stop();
     printf("New a SilentObj from ObjectPool takes %luns\n", timer1.n_elapsed()/N);
 
+    for (size_t i = 0; i < N; i++) {
+      ObjectPool<SilentObj>::Singleton()->Delete(list1[i]);
+    }
+    list1.clear();
+
     timer2.start();
     for (size_t i = 0; i < N; i++) {
       list2.push_back(new SilentObj);
     }
     timer2.stop();
     printf("New a SilentObj from system takes %luns\n", timer2.n_elapsed()/N);
-
-    for (size_t i = 0; i < N; i++) {
-      ObjectPool<SilentObj>::Singleton()->Delete(list1[i]);
-    }
-    list1.clear();
 
     for (size_t i = 0; i < N; i++) {
       delete list2[i];

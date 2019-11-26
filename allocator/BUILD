@@ -15,10 +15,10 @@ cc_library(
     hdrs = glob([
         "*.h",
     ]),
-    copts = COPTS + select({
-        ":coverage": COVERAGE,
-        "//conditions:default": [],
-    }),
-    linkopts = OPTIMIZE,
+    #copts = COPTS + select({
+    #    ":coverage": COVERAGE,
+    #    "//conditions:default": [],
+    #}),
+    copts = COPTS + OPTIMIZE,
     visibility = ["//visibility:public"],
 )
