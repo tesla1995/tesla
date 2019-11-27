@@ -456,3 +456,17 @@ cc_test(
     "-ltcmalloc_and_profiler",
   ],
 )
+
+cc_test(
+  name = "object_pool_baidu_test",
+  srcs = ["object_pool_baidu_test.cc"],
+  deps = [
+    "//allocator:allocator",
+    "//external:gtest",
+    "//tutil:tutil",
+  ],
+  copts = COPTS + OPTIMIZE,
+  linkopts = [
+    "-lpthread",
+  ],
+)

@@ -42,7 +42,7 @@ struct ObjectPoolFreeChunk<T, 0> {
 };
 
 template <typename T> struct ObjectPoolBlockMaxSize {
-    static const size_t value = 1UL << 16; // bytes
+    static const size_t value = 65536; // bytes
 };
 template <typename T> struct ObjectPoolBlockMaxItem {
     static const size_t value = 256;
@@ -58,13 +58,13 @@ public:
 };
 
 template <typename T>
-class ObjectPool {
+class TESLA_CACHELINE_ALIGNMENT ObjectPool {
  public:
   static constexpr size_t kNumItemsInBlock = ObjectPoolBlockItemNum<T>::value;
   static constexpr size_t kNumItemsInFreeChunk = kNumItemsInBlock;
-  static constexpr size_t kMaxNumBlockGroup = 1UL << 16;
-  static constexpr size_t kNumBlocksInGroup = 1UL << 16;
-  static constexpr size_t kInitialFreeListSize = 1UL << 10;
+  static constexpr size_t kMaxNumBlockGroup = 65536;
+  static constexpr size_t kNumBlocksInGroup = 65536;
+  static constexpr size_t kInitialFreeListSize = 1024;
 
   using FreeChunk = ObjectPoolFreeChunk<T, kNumItemsInFreeChunk>;
   using DynamicFreeChunk = ObjectPoolFreeChunk<T, 0>;
@@ -88,8 +88,8 @@ class ObjectPool {
   // Each thread has an instance of this class.
   class TESLA_CACHELINE_ALIGNMENT LocalPool {
    public:
-    LocalPool(ObjectPool* object_pool) {
-      object_pool_ = object_pool;
+    explicit LocalPool(ObjectPool* object_pool)
+      : object_pool_(object_pool) {
       object_pool_->num_local_pools_.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -115,20 +115,19 @@ class ObjectPool {
       if (object_pool_->PopFreeChunk(local_free_chunk_)) {
         return local_free_chunk_.ptrs[--local_free_chunk_.num_ptrs];
       }
-      
+
       if (local_block_ != nullptr && local_block_->num_items < kNumItemsInBlock) {
         T* object = new ((T*)local_block_->items + local_block_->num_items) T;
-        ++local_block_->num_items; 
+        ++local_block_->num_items;
         return object;
       }
 
       local_block_ = AddBlock();
       if (local_block_ != nullptr) {
         T* object = new ((T*)local_block_->items + local_block_->num_items) T;
-        ++local_block_->num_items; 
+        ++local_block_->num_items;
         return object;
       }
-
       return nullptr;
     }
 
@@ -156,7 +155,6 @@ class ObjectPool {
    private:
     ObjectPool* object_pool_{nullptr};
     Block* local_block_{nullptr};
-    size_t index{0};
     FreeChunk local_free_chunk_;
   };
 
@@ -169,19 +167,18 @@ class ObjectPool {
   }
 
   static inline ObjectPool* Singleton() {
-    //ObjectPool* object_pool = object_pool_.load(std::memory_order_consume);
-    //if (!object_pool) {
-    //  std::lock_guard<std::mutex> guard(init_mutex_);
-    //  object_pool = object_pool_.load(std::memory_order_relaxed); // protected by lock.
-    //  if (!object_pool) {
-    //    object_pool = new (std::nothrow) ObjectPool;
-    //    object_pool_.store(object_pool, std::memory_order_release);
-    //  }
-    //}
-    //return object_pool;
+    ObjectPool* object_pool = object_pool_.load(std::memory_order_consume);
+    if (object_pool != nullptr) {
+      return object_pool;
+    }
 
-    static ObjectPool object_pool;
-    return &object_pool;
+    std::lock_guard<std::mutex> guard(init_mutex_);
+    object_pool = object_pool_.load(std::memory_order_relaxed); // protected by lock.
+    if (object_pool == nullptr) {
+      object_pool = new (std::nothrow) ObjectPool;
+      object_pool_.store(object_pool, std::memory_order_release);
+    }
+    return object_pool;
   }
 
   size_t GetLocalPoolNumItems() {
@@ -192,28 +189,6 @@ class ObjectPool {
     return GetLocalPool()->NumFreeItems();
   }
 
-  bool PopFreeChunk(FreeChunk& c) {
-    // Critical for the case that most Delete are called in
-    // different threads.
-    if (free_chunks_.empty()) {
-      return false;
-    }
-
-    DynamicFreeChunk* p{nullptr};
-    {
-      std::lock_guard<std::mutex> guard(free_chunks_mutex_);
-      if (free_chunks_.empty()) {
-        return false;
-      }
-      p = free_chunks_.back(); 
-      free_chunks_.pop_back();
-    }
-
-    c.num_ptrs = p->num_ptrs;
-    memcpy(c.ptrs, p->ptrs, p->num_ptrs * sizeof(p->ptrs[0]));
-    free(p);
-    return true;
-  }
 
   inline LocalPool* GetLocalPool() {
     static thread_local LocalPool local_pool(this);
@@ -241,6 +216,29 @@ class ObjectPool {
 
     std::lock_guard<std::mutex> guard(free_chunks_mutex_);
     free_chunks_.push_back(p);
+    return true;
+  }
+
+  bool PopFreeChunk(FreeChunk& c) {
+    // Critical for the case that most Delete are called in
+    // different threads.
+    if (free_chunks_.empty()) {
+      return false;
+    }
+
+    DynamicFreeChunk* p{nullptr};
+    {
+      std::lock_guard<std::mutex> guard(free_chunks_mutex_);
+      if (free_chunks_.empty()) {
+        return false;
+      }
+      p = free_chunks_.back(); 
+      free_chunks_.pop_back();
+    }
+
+    c.num_ptrs = p->num_ptrs;
+    memcpy(c.ptrs, p->ptrs, p->num_ptrs * sizeof(p->ptrs[0]));
+    free(p);
     return true;
   }
 
@@ -293,8 +291,8 @@ class ObjectPool {
     return new_group != nullptr;
   }
 
-  //static std::atomic<ObjectPool*> object_pool_{nullptr};
-  //static std::mutex init_mutex_;
+  static std::atomic<ObjectPool*> object_pool_;
+  static std::mutex init_mutex_;
 
   static std::atomic<BlockGroup*> block_groups_[kMaxNumBlockGroup]; 
   static std::atomic<size_t> num_block_groups_;
@@ -305,6 +303,12 @@ class ObjectPool {
 
   static std::atomic<size_t> num_local_pools_;
 };
+
+template <typename T>
+std::atomic<ObjectPool<T>*> ObjectPool<T>::object_pool_{nullptr};
+
+template <typename T>
+std::mutex ObjectPool<T>::init_mutex_;
 
 template <typename T>
 std::atomic<typename ObjectPool<T>::BlockGroup*> ObjectPool<T>::block_groups_[kMaxNumBlockGroup];

@@ -141,15 +141,6 @@ TEST_F(ObjectPoolTest, NewPerformance) {
   ObjectPool<SilentObj>::Singleton()->Delete(ObjectPool<SilentObj>::Singleton()->New());
   delete (new SilentObj);
 
-  ObjectPool<SilentObj>::Singleton()->New();
-
-  Timer timer;
-  timer.start();
-  ObjectPool<SilentObj>::Singleton()->New();
-  timer.stop();
-  printf("New a SilentObj from ObjectPool takes %luns\n", timer.n_elapsed());
-  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems(), 2);
-
   for (size_t j = 0; j < 2; j++) {
     Timer timer;
     Timer timer1, timer2;
