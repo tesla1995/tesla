@@ -453,5 +453,6 @@ cc_test(
   copts = COPTS + OPTIMIZE,
   linkopts = [
     "-lpthread",
+    "-ltcmalloc_and_profiler",
   ],
 )
