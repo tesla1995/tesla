@@ -108,27 +108,27 @@ TEST_F(ObjectPoolTest, NonDestructObj) {
   ASSERT_EQ(obj->b, 2);
 }
 
-TEST_F(ObjectPoolTest, Sanity) {
-  std::vector<SilentObj*> list;
-
-  size_t num_items = ObjectPool<SilentObj>::kNumItemsInBlock;
-  cout << "SilentObj:: num_items=" << num_items << endl;
-
-  list.reserve(2 * num_items + 5);
-  for (size_t i = 0; i < list.capacity(); i++) {
-    list.push_back(ObjectPool<SilentObj>::Singleton()->New()); 
-    ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems()%num_items, (i+1)%num_items);
-  }
-  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems(), 5);
-
-  for (size_t i = 0; i < list.capacity(); i++) {
-    ObjectPool<SilentObj>::Singleton()->Delete(list[i]);
-    ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumFreeItems()%num_items, (i+1)%num_items);
-  }
-  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumFreeItems(), 5);
-
-  list.clear();
-}
+//TEST_F(ObjectPoolTest, Sanity) {
+//  std::vector<SilentObj*> list;
+//
+//  size_t num_items = ObjectPool<SilentObj>::kNumItemsInBlock;
+//  cout << "SilentObj:: num_items=" << num_items << endl;
+//
+//  list.reserve(2 * num_items + 5);
+//  for (size_t i = 0; i < list.capacity(); i++) {
+//    list.push_back(ObjectPool<SilentObj>::Singleton()->New()); 
+//    ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems()%num_items, (i+1)%num_items);
+//  }
+//  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems(), 5);
+//
+//  for (size_t i = 0; i < list.capacity(); i++) {
+//    ObjectPool<SilentObj>::Singleton()->Delete(list[i]);
+//    ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumFreeItems()%num_items, (i+1)%num_items);
+//  }
+//  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumFreeItems(), 5);
+//
+//  list.clear();
+//}
 
 TEST_F(ObjectPoolTest, NewPerformance) {
   size_t N = 10000;
@@ -136,13 +136,25 @@ TEST_F(ObjectPoolTest, NewPerformance) {
   std::vector<SilentObj*> list2;
   list1.reserve(N);
   list2.reserve(N);
- 
+
   // warm up
   ObjectPool<SilentObj>::Singleton()->Delete(ObjectPool<SilentObj>::Singleton()->New());
   delete (new SilentObj);
 
+  ObjectPool<SilentObj>::Singleton()->New();
+
+  Timer timer;
+  timer.start();
+  ObjectPool<SilentObj>::Singleton()->New();
+  timer.stop();
+  printf("New a SilentObj from ObjectPool takes %luns\n", timer.n_elapsed());
+  ASSERT_EQ(ObjectPool<SilentObj>::Singleton()->GetLocalPoolNumItems(), 2);
+
   for (size_t j = 0; j < 2; j++) {
+    Timer timer;
     Timer timer1, timer2;
+    int64_t max_latency = 0;
+    int index = 0;
 
     timer1.start();
     for (size_t i = 0; i < N; i++) {
@@ -151,17 +163,18 @@ TEST_F(ObjectPoolTest, NewPerformance) {
     timer1.stop();
     printf("New a SilentObj from ObjectPool takes %luns\n", timer1.n_elapsed()/N);
 
+    for (size_t i = 0; i < N; i++) {
+      ObjectPool<SilentObj>::Singleton()->Delete(list1[i]);
+      if (timer.n_elapsed() > max_latency) { max_latency = timer.n_elapsed(); index = i; }
+    }
+    list1.clear();
+
     timer2.start();
     for (size_t i = 0; i < N; i++) {
       list2.push_back(new SilentObj);
     }
     timer2.stop();
     printf("New a SilentObj from system takes %luns\n", timer2.n_elapsed()/N);
-
-    for (size_t i = 0; i < N; i++) {
-      ObjectPool<SilentObj>::Singleton()->Delete(list1[i]);
-    }
-    list1.clear();
 
     for (size_t i = 0; i < N; i++) {
       delete list2[i];
@@ -173,7 +186,6 @@ TEST_F(ObjectPoolTest, NewPerformance) {
 }  // namespace
 
 int main(int argc, char **argv) {
-
   // Parses the command line for googletest flags, and removes all recognized flags.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
