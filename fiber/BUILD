@@ -15,7 +15,7 @@ cc_library(
     hdrs = glob([
         "fcontext.h",
     ]),
-    copts = COPTS + OPTIMIZE,
+    copts = COPTS,
     visibility = ["//visibility:public"],
 )
 
@@ -24,5 +24,6 @@ cc_binary(
   srcs = ["fcontext_test.cc"],
   deps = [
     ":fcontext",
+    "//allocator:allocator",
   ],
 )

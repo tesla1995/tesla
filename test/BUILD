@@ -470,3 +470,13 @@ cc_test(
     "-lpthread",
   ],
 )
+
+cc_test(
+  name = "fcontext_test",
+  srcs = ["fcontext_test.cc"],
+  deps = [
+    "//fiber:fcontext",
+    "//external:gtest",
+  ],
+  copts = COPTS + OPTIMIZE,
+)
