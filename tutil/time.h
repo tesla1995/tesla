@@ -20,6 +20,9 @@
 
 #include <stdint.h>
 #include <time.h>
+#include <vector>
+#include <algorithm>
+#include <numeric>
 
 namespace tesla {
 namespace tutil {
@@ -33,7 +36,7 @@ inline int64_t clock_ns() {
 // Count elapses
 class Timer {
  public:
-  Timer() = default;
+  Timer() : overhead_(overhead_clock()) {}
   ~Timer() = default;
 
   // Start this timer.
@@ -47,20 +50,39 @@ class Timer {
     stop_ = clock_ns();
   }
 
+  int64_t overhead_clock(size_t iterations = 10) {
+    std::vector<int64_t> overhead(iterations, 0);
+    for (size_t i = 0; i < overhead.size(); i++) {
+      std::generate(overhead.begin(), overhead.end(), clock_overhead());
+    }
+
+    return static_cast<int64_t>(std::accumulate(overhead.begin(),
+                                                overhead.end(),
+                                                0) / iterations);
+  }
+
   // Get the elapse from start() to stop(), in various units.
-  int64_t n_elapsed() const { return stop_ - start_; }
+  int64_t n_elapsed() const { return stop_ - start_ - overhead_; }
   int64_t u_elapsed() const { return n_elapsed() / 1000L; }
   int64_t m_elapsed() const { return u_elapsed() / 1000L; }
   int64_t s_elapsed() const { return m_elapsed() / 1000L; }
 
-  double n_elapsed(double) const { return static_cast<double>(stop_ - start_); }
+  double n_elapsed(double) const { return static_cast<double>(stop_ - start_ - overhead_); }
   double u_elapsed(double) const { return static_cast<double>(n_elapsed()) / 1000.0; }
   double m_elapsed(double) const { return static_cast<double>(u_elapsed()) / 1000.0; }
   double s_elapsed(double) const { return static_cast<double>(m_elapsed()) / 1000.0; }
 
  private:
+  struct clock_overhead {
+    int64_t operator()() {
+      int64_t now = clock_ns();         
+      return (clock_ns() - now);
+    }
+  };
+
   int64_t start_{0};
   int64_t stop_{0};
+  int64_t overhead_{0};
 };
 
 } // namespace tutil
