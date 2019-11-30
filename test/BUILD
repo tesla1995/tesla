@@ -480,3 +480,28 @@ cc_test(
   ],
   copts = COPTS + OPTIMIZE,
 )
+
+cc_test(
+  name = "fcontext_performance_test",
+  srcs = ["fcontext_performance_test.cc"],
+  deps = [
+    "//fiber:fcontext",
+    "//tutil:tutil",
+  ],
+  copts = COPTS + OPTIMIZE,
+  linkopts = [
+    "-lpthread",
+  ],
+)
+
+cc_test(
+  name = "ucontext_performance_test",
+  srcs = ["ucontext_performance_test.cc"],
+  deps = [
+    "//tutil:tutil",
+  ],
+  copts = COPTS + OPTIMIZE,
+  linkopts = [
+    "-lpthread",
+  ],
+)
